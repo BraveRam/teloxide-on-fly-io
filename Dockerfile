@@ -1,40 +1,44 @@
-FROM rust:1.74.1-slim-bookworm as builder
+# ---- Build Stage ----
+FROM rust:1.80-slim-bookworm AS builder
 
-# Thanks: https://dev.to/rogertorres/first-steps-with-docker-rust-30oi
-
-# Create new build dir
+# Create a new empty shell project
 RUN USER=root cargo new --bin app
 WORKDIR /app
 
-# copy over your manifests
-#COPY ./Cargo.lock ./Cargo.lock
-COPY ./Cargo.toml ./Cargo.toml
+# Install dependencies required for building
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libssl-dev \
+    pkg-config \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# this build step will cache your dependencies
-RUN apt update && \
-    apt install -y libssl-dev openssl pkg-config
-RUN cargo build --release
-RUN rm src/*.rs
+# Copy the manifest files
+COPY Cargo.toml Cargo.lock ./
 
-# copy your source tree
+# Fetch dependencies (this will be cached unless the Cargo.toml changes)
+RUN cargo build --release && \
+    rm src/*.rs
+
+# Copy the actual source code
 COPY ./src ./src
 
-# build for release
-RUN rm ./target/release/deps/*
+# Build the application
 RUN cargo build --release
 
-# our final base
-FROM debian:bookworm-slim
+# ---- Runtime Stage ----
+FROM debian:bookworm-slim AS runtime
+
+# Install needed packages (e.g. for TLS)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# image 'debian:bookworm-slim' needs ca-certificates package for TLS
-RUN apt-get update && \
-    apt install -y ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# copy the build artifact from the build stage, 
+# Copy the binary from the builder stage
 COPY --from=builder /app/target/release/teloxide-on-fly-io .
 
-# set the startup command to run your binary
+# Run the application
 CMD ["./teloxide-on-fly-io"]
-
