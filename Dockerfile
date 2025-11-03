@@ -1,32 +1,31 @@
-# ---- Build Stage ----
-FROM rust:1.80-slim-bookworm AS builder
-
+# Builder stage
+FROM rust:1.86-slim-bookworm AS builder
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies for building
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libssl-dev pkg-config ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        libssl-dev pkg-config ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy the full source tree including Cargo.toml and src/
+# Copy source code
 COPY . .
 
-# Build the application
+# Build release binary
 RUN cargo build --release
 
-# ---- Runtime Stage ----
-FROM debian:bookworm-slim AS runtime
-
+# Runtime stage
+FROM debian:bookworm-slim
 WORKDIR /app
 
-# Needed for TLS
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy binary from build stage
-COPY --from=builder /app/target/release/teloxide-on-fly-io .
+# Copy binary from builder
+COPY --from=builder /app/target/release/<your-binary-name> .
 
-# Run the binary
+# Run the app
 CMD ["./teloxide-on-fly-io"]
